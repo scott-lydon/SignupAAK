@@ -9,6 +9,7 @@ import Foundation
 import SwiftUI
 
 struct OfflineBannerView: View {
+    
     var body: some View {
         Text("No Internet Connection")
             .font(.subheadline.weight(.semibold))
