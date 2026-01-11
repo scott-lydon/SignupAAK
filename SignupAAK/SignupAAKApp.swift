@@ -10,12 +10,20 @@ import SwiftUI
 @main
 struct SignupAAKApp: App {
 
-    @StateObject private var connectivity = ConnectivityMonitor()
-    
+    @StateObject private var connectivity = ConnectivityMonitor.shared
+
     var body: some Scene {
         WindowGroup {
             SignupView()
-                .environmentObject(connectivity)
+                //.environmentObject(connectivity)
+                .safeAreaInset(edge: .top, spacing: 0) {
+                    if !connectivity.isOnline {
+                        OfflineBannerView()
+                            .frame(height: 44)
+                            .frame(maxWidth: .infinity)
+                    }
+                }
+                .animation(.default, value: connectivity.isOnline)
         }
     }
 }
