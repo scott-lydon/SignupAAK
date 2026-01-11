@@ -28,10 +28,6 @@ final class SignupViewModel: ObservableObject {
     @Published var resultAlertMessage: String = ""
 
     @Published var isLoading: Bool = false
-    @Published private(set) var isNetworkAvailable: Bool = true
-
-    private let pathMonitor: NWPathMonitor = .init()
-    private let pathQueue: DispatchQueue = .init(label: "SignupViewModel.NetworkPathMonitor")
 
     var userTypeError: String? {
         guard hasAttemptedSubmit else { return nil }
@@ -113,46 +109,40 @@ final class SignupViewModel: ObservableObject {
     func submitTapped() {
         hasAttemptedSubmit = true
         guard allErrors.isEmpty, let payload,
-              let request = try? URLRequest.signUp(payload: payload) else { return }
+              let request = try? URLRequest.signUp(payload: payload) else {
+            isLoading = false
+            return
+        }
+        isLoading = true
+        ConnectivityMonitor.shared.updateOnlineStatus()
         URLSession.shared.dataTask(with: request) { [weak self] data, response, error in
-            guard let self else { return }
-
             let responseText = data.map { String(decoding: $0, as: UTF8.self) } ?? ""
+            Task { @MainActor [weak self] in
+                guard let self else { return }
+                isLoading = false
 
-            if let error {
-                Task { @MainActor in
-                    self.resultAlertTitle = "Network Error"
-                    self.resultAlertMessage = error.localizedDescription
-                    self.shouldShowResultAlert = true
+                if let error {
+                    resultAlertTitle = "Network Error"
+                    resultAlertMessage = error.localizedDescription
+                    shouldShowResultAlert = true
+                    return
                 }
-                return
-            }
 
-            guard let httpResponse = response as? HTTPURLResponse else {
-                Task { @MainActor in
-                    self.resultAlertTitle = "Unexpected Response"
-                    self.resultAlertMessage = "No HTTP response received."
-                    self.shouldShowResultAlert = true
+                guard let httpResponse = response as? HTTPURLResponse else {
+                    resultAlertTitle = "Unexpected Response"
+                    resultAlertMessage = "No HTTP response received."
+                    shouldShowResultAlert = true
+                    return
                 }
-                return
-            }
 
-            if (200..<300).contains(httpResponse.statusCode) {
-                Task { @MainActor in
-                    self.resultAlertTitle = "Success"
-                    self.resultAlertMessage = "Signup request accepted. Check your email to verify your account."
-                    self.shouldShowResultAlert = true
+                let isSuccess = (200..<300).contains(httpResponse.statusCode)
+                resultAlertTitle = isSuccess ? "Success" : "Signup Failed"
+                if isSuccess {
+                    resultAlertMessage = "Signup request accepted. Check your email to verify your account."
+                } else {
+                    resultAlertMessage = responseText.isEmpty ? "Server returned status code \(httpResponse.statusCode)." : responseText
                 }
-            } else {
-                Task { @MainActor in
-                    self.resultAlertTitle = "Signup Failed"
-                    if responseText.isEmpty {
-                        self.resultAlertMessage = "Server returned status code \(httpResponse.statusCode)."
-                    } else {
-                        self.resultAlertMessage = responseText
-                    }
-                    self.shouldShowResultAlert = true
-                }
+                shouldShowResultAlert = true
             }
         }.resume()
     }
@@ -198,3 +188,4 @@ extension URLRequest {
         return urlRequest
     }
 }
+
